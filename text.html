@@ -2,8 +2,13 @@
 <html>
 <head>
     <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Faded Green</title>
     <style>
+        :root{
+            /* 基准字体大小（可被 clamp/media queries 覆盖） */
+            --base-font: 16px;
+        }
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -13,6 +18,9 @@
             color: #e0e0e0;
             overflow: hidden; /* 禁止页面垂直滚动，保持内容居中 */
             height: 100vh;
+            /* 响应式字体：在窄屏时比桌面更大，在超宽屏时不超过上限 */
+            font-size: clamp(15px, 1.9vw, 20px);
+            line-height: 1.6;
         }
         .story-section {
             display: none;
@@ -189,6 +197,50 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+        }
+        /* BGM 控件样式 */
+        .bgm-controls {
+            position: fixed;
+            top: 12px;
+            right: 16px;
+            background: rgba(0,0,0,0.6);
+            color: #e0e0e0;
+            padding: 8px 10px;
+            border-radius: 8px;
+            z-index: 1500;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+        .bgm-controls input[type="text"] { background: #222; color: #fff; border: 1px solid #333; padding: 4px 6px; border-radius:4px; }
+        .bgm-controls button { background:#2c2c2c; color:#e0e0e0; border:1px solid #444; padding:6px 8px; border-radius:4px; cursor:pointer }
+        .bgm-controls button:hover { background:#3a3a3a }
+        .bgm-controls .small { padding:4px 6px; font-size:12px }
+
+        /* 小屏（手机）优化 */
+        @media (max-width: 600px) {
+            body {
+                padding: 14px;
+                font-size: clamp(16px, 4.2vw, 20px);
+            }
+            .story-section {
+                padding: 18px 12px 110px;
+                gap: 12px;
+            }
+            .text-segment.visible { margin: 14px 0; }
+            .next-button { bottom: 90px; right: 14px; padding: 10px 14px; font-size: 15px; }
+            .history-button { bottom: 90px; left: 14px; padding: 8px 10px; }
+            .choice-button { padding: 12px; font-size: 16px; }
+            .bgm-controls { top: 8px; right: 8px; font-size: 12px; padding: 6px; gap:6px }
+            .bgm-controls input[type="text"] { width: 120px; }
+        }
+
+        /* 更大屏幕微调 */
+        @media (min-width: 1200px) {
+            body { font-size: 18px; }
+            .text-segment { max-width: 900px; }
         }
     </style>
 </head>
@@ -851,6 +903,79 @@
         } else {
             initStory();
         }
+
+        /* ---------------- BGM 播放器（在页面右上角显示） ---------------- */
+        (function setupBgmControls(){
+            const container = document.createElement('div');
+            container.className = 'bgm-controls';
+            container.innerHTML = `
+                <button id="bgmPlay" class="small">▶</button>
+                <button id="bgmPause" class="small">❚❚</button>
+                <button id="bgmStop" class="small">■</button>
+                <label title="本地文件"><input id="bgmFile" type="file" accept="audio/*" style="display:none"></label>
+                <button id="bgmFileBtn" class="small">文件</button>
+                <input id="bgmUrl" type="text" placeholder="BGM URL" style="width:220px">
+                <button id="bgmLoad" class="small">加载</button>
+                <label style="display:flex;align-items:center;gap:6px;"><input id="bgmLoop" type="checkbox">循环</label>
+                <label style="display:flex;align-items:center;gap:6px;"><input id="bgmMute" type="checkbox">静音</label>
+                <input id="bgmVol" type="range" min="0" max="1" step="0.01" value="0.8" title="音量">
+            `;
+            document.body.appendChild(container);
+
+            let audio = new Audio();
+            audio.loop = false;
+            audio.volume = 0.8;
+            audio.preload = 'auto';
+
+            const btnPlay = document.getElementById('bgmPlay');
+            const btnPause = document.getElementById('bgmPause');
+            const btnStop = document.getElementById('bgmStop');
+            const fileInput = document.getElementById('bgmFile');
+            const fileBtn = document.getElementById('bgmFileBtn');
+            const urlInput = document.getElementById('bgmUrl');
+            const loadBtn = document.getElementById('bgmLoad');
+            const loopChk = document.getElementById('bgmLoop');
+            const muteChk = document.getElementById('bgmMute');
+            const volRange = document.getElementById('bgmVol');
+
+            // 载入上次 URL
+            try { const saved = localStorage.getItem('fg_bgm_url'); if (saved) urlInput.value = saved; } catch(e){}
+
+            function setSource(src){
+                try { audio.pause(); } catch(e){}
+                audio.src = src;
+                audio.load();
+            }
+
+            fileBtn.addEventListener('click', ()=> fileInput.click());
+            fileInput.addEventListener('change', (ev)=>{
+                const f = ev.target.files && ev.target.files[0];
+                if (!f) return;
+                const url = URL.createObjectURL(f);
+                setSource(url);
+                try { localStorage.setItem('fg_bgm_url', url); } catch(e){}
+                audio.play().catch(()=>{});
+            });
+
+            loadBtn.addEventListener('click', ()=>{
+                const url = urlInput.value.trim();
+                if (!url) return;
+                setSource(url);
+                try { localStorage.setItem('fg_bgm_url', url); } catch(e){}
+            });
+
+            btnPlay.addEventListener('click', ()=>{ audio.play().catch(()=>{}); });
+            btnPause.addEventListener('click', ()=>{ audio.pause(); });
+            btnStop.addEventListener('click', ()=>{ audio.pause(); audio.currentTime = 0; });
+            loopChk.addEventListener('change', ()=>{ audio.loop = loopChk.checked; });
+            muteChk.addEventListener('change', ()=>{ audio.muted = muteChk.checked; });
+            volRange.addEventListener('input', ()=>{ audio.volume = parseFloat(volRange.value); });
+
+            // 如果有已保存 URL，尝试预加载（但不 autoplay）
+            if (urlInput.value) {
+                try { audio.src = urlInput.value; audio.load(); } catch(e){}
+            }
+        })();
     </script>
 </body>
 </html>
