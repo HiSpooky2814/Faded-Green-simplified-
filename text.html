@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Faded Green</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            overflow: hidden; /* 禁止页面垂直滚动，保持内容居中 */
+            height: 100vh;
+        }
+        .story-section {
+            display: none;
+            line-height: 1.6;
+            position: relative;
+            /* 使用全视口高度，但默认将内容靠上排列以减少单段巨大空白 */
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column; /* 垂直堆叠段落，防止并排横向排列 */
+            align-items: center;
+            justify-content: flex-start; /* 改为靠上排列，避免单个段落垂直居中造成大空白 */
+            padding: 24px 16px 120px; /* 给底部固定按钮留出空间，略微减小底部间距 */
+            gap: 18px; /* 段落间距统一控制，避免段落顶端/底端出现怪异空隙 */
+        }
+        /* 保持起始章节垂直居中，阅读体验更像小说首屏 */
+        #start.story-section {
+            justify-content: center;
+        }
+        /* 起始章节的可见段落采用垂直居中，以便首屏看起来居中 */
+        #start .text-segment.visible {
+            margin: auto 0 !important;
+        }
+        .story-section.active {
+            display: flex;
+        }
+        .text-segment {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.35s ease-in-out;
+            max-width: 760px;
+            text-align: left;
+        }
+        /* 当前段落单独可见并居中 */
+        .text-segment.visible {
+            display: block !important;
+            opacity: 1;
+            margin: 18px 0; /* 采用常规段落间距，避免单段垂直居中造成页面空旷 */
+            z-index: 150;
+            align-self: center; /* 在列布局中水平居中 */
+            max-width: 760px;
+            width: 100%;
+        }
+
+        .story-section.active {
+            z-index: 100;
+        }
+        .next-button {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .next-button:hover {
+            background-color: #45a049;
+        }
+        .next-button.hidden {
+            display: none;
+        }
+        .history-button {
+            position: fixed;
+            bottom: 80px;
+            left: 20px;
+            padding: 10px 14px;
+            background: #333;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .history-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #121212;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            padding: 18px;
+            width: 80%;
+            max-width: 900px;
+            max-height: 70vh;
+            overflow: visible;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.7);
+            display: none;
+            z-index: 2000;
+        }
+        .history-modal.visible {
+            display: block;
+        }
+        .history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            position: sticky;
+            top: 0;
+            background: inherit;
+            padding-bottom: 8px;
+            z-index: 2010;
+        }
+        .history-header h3 {
+            margin: 0;
+        }
+        .history-content {
+            max-height: calc(70vh - 56px);
+            overflow: auto;
+            margin-top: 8px;
+        }
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .history-list li {
+            padding: 8px 10px;
+            border-bottom: 1px solid #222;
+            white-space: pre-wrap;
+        }
+        .history-close {
+            background: transparent;
+            border: none;
+            color: #e0e0e0;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .choice-button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #2c2c2c;
+            color: #e0e0e0;
+            border: 1px solid #404040;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .choice-button:hover {
+            background-color: #404040;
+        }
+        .skill-check {
+            color: #4CAF50;
+            font-style: italic;
+            display: inline;
+        }
+        .skill-text {
+            font-style: italic;
+        }
+        .thought-cabinet {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-left: 3px solid #4CAF50;
+            margin: 10px 0;
+        }
+        .character-name {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .start-over {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <!-- 开始部分 -->
+    <div id="start" class="story-section active">
+        <div class="text-segment" data-segment="1">
+            <p>你在一间肮脏的旅馆房里醒来。</p>
+            <p>窗帘像发霉的肺，街灯的光从百叶窗缝隙渗进来，就像有人随手丢了几张钞票施舍你。</p>
+        </div>
+
+        <div class="text-segment" data-segment="2">
+            <p><span class="skill-check">故弄玄虚（DRAMA）：</span><span class="skill-text">"多么戏剧化。英雄醉倒街头，宿醉在破碎的梦想上。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="3">
+            <p>"你是谁？"你问镜子里的那个男人。</p>
+            <p>他的脸碎成了几片。他咧嘴笑着。</p>
+            <p>他手里——不，是你的手里握着一枚戒指。褪色的，绿色的。</p>
+        </div>
+
+        <div class="text-segment" data-segment="4">
+            <p><span class="skill-check">见微知著（VISUAL CALCULUS）：</span><span class="skill-text">"指节有伤痕。新伤。有人为这枚戒指打过架，最近。"</span></p>
+            <p><span class="skill-check">平心定气（VOLITION）：</span><span class="skill-text">"握紧它。这东西很重要。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="5">
+            <p>你脑袋痛得像被五十辆出租车碾过，混着酒精、记忆碎片，还有一个从你体内传来的拷问声音。</p>
+            <p>哈尔·乔丹。飞行员？绿灯侠？叛徒？</p>
+        </div>
+
+        <div class="text-segment" data-segment="6">
+            <p><span class="skill-check">逻辑思维（LOGIC）：</span><span class="skill-text">"技术上都对。但你今天想成为哪一个？"</span></p>
+            <p><span class="skill-check">内陆帝国（INLAND EMPIRE）：</span><span class="skill-text">"你死过。或者差点。有什么东西被夺走了。"</span></p>
+            <p><span class="skill-check">同舟共济（ESPRIT DE CORPS）：</span><span class="skill-text">"有人来了。你曾经认识的人。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="7">
+            <p>砰——有人踹门而入。一名穿着黑色防弹风衣的男人。他什么也不说，只是看着你。</p>
+        </div>
+
+        <div class="text-segment" data-segment="8">
+            <p><span class="skill-check">争强好胜（AUTHORITY）：</span><span class="skill-text">"他压你一头。哪怕只是气场。"</span></p>
+            <p><span class="skill-check">五感发达（PERCEPTION）：</span><span class="skill-text">"下颌紧绷，屏住呼吸。他在等什么——不，是等你。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="9">
+            <p>他的眼神是一口深井。像一纸判决书。像你年轻时梦想里所有未曾兑现的道德承诺。</p>
+            <p>"你终于醒了。"</p>
+        </div>
+
+        <div class="text-segment" data-segment="10">
+            <p><span class="skill-check">通情达理（EMPATHY）：</span><span class="skill-text">"他松了口气。只是他不会说。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="11">
+            <p>你不该认识他。</p>
+            <p>可你认得。</p>
+            <p>你认得那张在新闻上、梦里、床单褶皱中都出现过的脸。</p>
+            <p><span class="character-name">布鲁斯·韦恩。蝙蝠侠。</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="12">
+            <p>他曾经是你的什么？同事？指挥？情人？</p>
+        </div>
+
+        <div class="text-segment" data-segment="13">
+            <p><span class="skill-check">能说会道（RHETORIC）：</span><span class="skill-text">"你早知道答案了。只是你想亲口说出来。"</span></p>
+            <p><span class="skill-check">循循善诱（SUGGESTION）：</span><span class="skill-text">"说出来。一切都会浮现。"</span></p>
+        </div>
+
+        <div class="text-segment" data-segment="14">
+            <div class="thought-cabinet">
+                <p>[思想柜 触发]</p>
+                <p><span class="skill-check">能说会道 (RHETORIC)：</span><span class="skill-text">"好了，侦探。关键时刻。别搞砸了。你必须定义这个。现在。"</span></p>
+                <p><span class="skill-check">平心定气 (VOLITION)：</span><span class="skill-text">"稳住。你是谁，取决于你现在选择是谁。别被他看穿。"</span></p>
+                <p><span class="skill-check">内陆帝国 (INLAND EMPIRE)：</span><span class="skill-text">"他已经看穿你了。他正在阅读你灵魂里的每一道裂痕。他甚至可能就是刻下裂痕的人。"</span></p>
+            </div>
+        </div>
+
+        <div class="text-segment" data-segment="15">
+            <p>[关键抉择] 他曾经是你的什么？</p>
+            <button class="choice-button" onclick="showSection('choice1')">1. [逻辑思维] "他只是个同事。一个难搞的同事。"</button>
+            <button class="choice-button" onclick="showSection('choice2')">2. [争强好胜] "他是指挥官。蝙蝠侠。我的上级。"</button>
+            <button class="choice-button" onclick="showSection('choice3')">3. [内陆帝国] "……情人。他是情人。"</button>
+            <button class="choice-button" onclick="showSection('choice4')">4. [???] "我……我不记得了。我什么都不想选。"</button>
+        </div>
+    </div>
+
+    <!-- 选择1的结果 -->
+    <div id="choice1" class="story-section">
+        <p>你将情感推开，用冰冷的逻辑构筑了一道防火墙。同事。对。这最合理。</p>
+        <p><span class="skill-check">逻辑思维 (LOGIC)：</span>"完美。这是一个安全、稳定、可控的定义。你们在瞭望塔开会，在哥谭并肩作战。仅此而已。"</p>
+        <p><span class="skill-check">通情达理 (EMPATHY)：</span>"【检定失败】……你在撒谎。你感觉到了吗？你的胃在抽搐。你为什么要对自己撒谎？"</p>
+        
+        <div class="thought-cabinet">
+            <p>[思想柜 解锁]："我们只是同事" (We're Just Colleagues)</p>
+            <p>• (装备中)</p>
+            <p>• 效果：[逻辑思维] +1；[通情达理] -1。</p>
+            <p>• 简介：你们一起工作。分担任务。拯救世界。不带私人感情。这很专业。这很安全。</p>
+        </div>
+
+        <p>你用一种评估"同事"的眼神打量他，布鲁斯·韦恩察觉到了这种疏离。</p>
+        <p>他的眼神暗了下去，那口深井变得更冷了。</p>
+        <p>"……乔丹。"他开口，声音平直，不带感情。"看来你脑子里的损伤比我预想的还严重。我是布鲁斯。我来带你出去。"</p>
+        
+        <button class="choice-button" onclick="showSection('ending')">继续</button>
+    </div>
+
+    <!-- 选择2的结果 -->
+    <div id="choice2" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>你感到了……愤怒。还有一丝……服从？不，是挑战。他是那个发号施令的人。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p><span class="skill-check">争强好胜 (AUTHORITY)：</span>"对！就是这样！是他，那个控制狂。那个总以为自己什么都对的黑暗骑士。你从不欠他什么。你只欠你自己。"</p>
+        </div>
+        <div class="text-segment" data-segment="3">
+            <p><span class="skill-check">同舟共济 (ESPRIT DE CORPS)：</span>"【检定失败】可你曾经愿意为他（和联盟）赴死。那不仅仅是'命令'，不是吗？那是一种……信任。"</p>
+        </div>
+        <div class="text-segment" data-segment="4">
+            <div class="thought-cabinet">
+                <p>[思想柜 解锁]："哥谭的控制狂" (The Gotham Control Freak)</p>
+                <p>• (装备中)</p>
+                <p>• 效果：[争强好胜] +1；[同舟共济] -1。</p>
+                <p>• 简介：他是规则。他是黑夜。他认为他拥有你。去你妈的。你才是那个能飞的人。</p>
+            </div>
+        </div>
+        <div class="text-segment" data-segment="5">
+            <p>你站直了身体，试图在气势上与他对等。</p>
+            <p>布鲁斯·韦恩眯起了眼睛。他认出了这个姿态——这是"绿灯侠"挑战"蝙蝠侠"时的姿态。</p>
+            <p>"收起你的刺，哈尔。"他冷冷地说."我不是来和你打架的。我来这里……是因为你替我挡了那一下。你还记得吗？"</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 选择3的结果 -->
+    <div id="choice3" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>这个词像炸弹一样在你的脑海里引爆了。不是"曾经是"。是"是"。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>这个词解释了为什么旅馆房间如此肮脏（因为你心碎了）。解释了为什么戒指会褪色（因为你失去了"意志"）。</p>
+        </div>
+        <div class="text-segment" data-segment="3">
+            <p>也解释了为什么他踹门而入——因为他非来不可。</p>
+        </div>
+        <div class="text-segment" data-segment="4">
+            <p><span class="skill-check">通情达理 (EMPATHY)：</span>"……哦。这就是他看起来快碎掉的原因。"</p>
+        </div>
+        <div class="text-segment" data-segment="5">
+            <p><span class="skill-check">食髓知味 (ELECTROCHEMISTRY)：</span>"你记起他的味道了。不是指望远镜牌古龙水。是汗水、皮革、金属，还有雨夜的味道。你渴望那个味道。"</p>
+        </div>
+        <div class="text-segment" data-segment="6">
+            <div class="thought-cabinet">
+                <p>[思想柜 解锁]："这口深井（情人）" (The Deep Well (Lover))</p>
+                <p>• (装备中)</p>
+                <p>• 效果：[内陆帝国] +1；[通情达理] +1；[逻辑思维] -2。</p>
+                <p>• 简介：你曾在他怀里坠落。你曾以为那口深井里有光。也许你还在坠落。</p>
+            </div>
+        </div>
+        <div class="text-segment" data-segment="7">
+            <p>你没有说话。但你的眼神变了。</p>
+            <p>你不再是那个宿醉的酒鬼。你成了……某种更脆弱、也更危险的东西。</p>
+            <p>布鲁斯·韦恩……后退了半步。</p>
+            <p>不。不是后退。</p>
+            <p>他只是……犹豫了。</p>
+            <p>"……哈尔。"他开口，声音不再是砾石，而是几乎……沙哑."你记得我。"</p>
+            <button class="choice-button" onclick="showSection('lover_choice')">继续</button>
+        </div>
+    </div>
+
+    <!-- 选择4的结果 -->
+    <div id="choice4" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>你退缩了。面对这口深井，你选择了闭上眼睛。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p><span class="skill-check">平心定气 (VOLITION)：</span>"【检定失败】懦夫。你连面对自己都做不到。你还怎么面对他？你还怎么出去？"</p>
+        </div>
+        <div class="text-segment" data-segment="3">
+            <p><span class="skill-check">坚忍不拔 (PAIN THRESHOLD)：</span>"也好。无知是福。如果真相是痛苦的，那就让它见鬼去吧。你现在只想让这该死的头痛停下来。"</p>
+        </div>
+        <div class="text-segment" data-segment="4">
+            <div class="thought-cabinet">
+                <p>[思想柜 解锁]："迷雾中的男人" (Man in the Fog)</p>
+                <p>• (装备中)</p>
+                <p>• 效果：[坚忍不拔] +1；[所有智力/精神技能] -1。</p>
+                <p>• 简介：过去不重要。他是谁不重要。你是谁也不重要。你只想离开这里。</p>
+            </div>
+        </div>
+        <div class="text-segment" data-segment="5">
+            <p>你摇了摇头，脸上是真实的迷茫和痛苦。</p>
+            <p>布鲁斯·韦恩的表情……崩溃了。只有一瞬间，0.05秒。但你看到了。</p>
+            <p>那不是愤怒，也不是失望。</p>
+            <p><span class="skill-check">通情达理 (EMPATHY)：</span>"是恐惧。你让他感到了彻骨的恐惧。"</p>
+            <p>他深吸一口气，强迫自己恢复了那张"蝙蝠侠"面具。</p>
+            <p>"我叫布鲁斯·韦恩。"他一字一句地说，好像在教一个孩子。</p>
+            <p>"你叫哈尔·乔丹。你在一艘……该死的，你在你自己的潜意识里。我来带你出去。"</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 情人线的额外选择 -->
+    <div id="lover_choice" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>食髓知味 (ELECTROCHEMISTRY)："你当然记得。你记得他衬衫下的绷带，记得他凌晨三点喝威士忌时冰块的碰撞声，记得他皮肤上硝烟和汗水的味道。你渴望那个。"</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>平心定气 (VOLITION)："闭嘴！现在不是时候。你一团糟。他也一团糟。这房间里充满了破碎的玻璃，别赤脚踩上去。"</p>
+        </div>
+        <div class="text-segment" data-segment="3">
+            <p>争强好胜 (AUTHORITY)："看看他。他为你而来。他闯入了你的脑子。这是你的地盘。你现在掌控着局面。"</p>
+        </div>
+        <div class="text-segment" data-segment="4">
+            <button class="choice-button" onclick="showSection('lover_response1')">"我……（头痛欲裂）……我只记得你。"</button>
+            <button class="choice-button" onclick="showSection('lover_response2')">"我记得……你的味道。"</button>
+            <button class="choice-button" onclick="showSection('lover_response3')">"记得又怎样？你还是踹门进来了。"</button>
+            <button class="choice-button" onclick="showSection('lover_response4')">[保持沉默] "我不知道该说什么。"</button>
+        </div>
+    </div>
+
+    <!-- 情人线的各个回应 -->
+    <!-- 回应1 -->
+    <div id="lover_response1" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>[通情达理 (EMPATHY) - 关键检定成功] 这是一个……坦白。一个危险的、愚蠢的、发自肺腑的坦白。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>这句话击中了布鲁斯·韦恩。他的面具——蝙蝠侠的、亿万富翁的——再次裂开了。</p>
+            <p>他伸出手，似乎想碰你的肩膀，但在半空中停住了。</p>
+            <p>他的手在发抖。</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 回应2 -->
+    <div id="lover_response2" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>[食髓知味 (ELECTROCHEMISTRY) - 关键检定成功] 你赢了。你没有使用逻辑，也没有使用情感。你使用了化学。你用了最原始、最不加掩饰的武器。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>这句话在肮脏的空气中爆炸了。</p>
+            <p>布鲁斯·韦恩——那个蝙蝠侠，那个亿万富翁——窒息了。</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 回应3 -->
+    <div id="lover_response3" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>争强好胜 (AUTHORITY)："很好。你抓起一块玻璃碎片，扎回去了。你用你们之间最熟悉的语言说话：指责。"</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>布鲁斯·韦恩的表情冷了下来。那丝沙哑消失了。</p>
+            <p>"门是锁着的。"他用蝙蝠侠的声音说."而你快死了。我没时间敲门。"</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 回应4 -->
+    <div id="lover_response4" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>平心定气 (VOLITION) ：【检定失败】你崩溃了。面对他，面对这个"情人"的身份，你脑子里的保险丝烧断了。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p>你只是站在那里，握着那枚褪色的戒指，像个溺水的人。你什么都抓不住。</p>
+            <button class="choice-button" onclick="showSection('ending')">继续</button>
+        </div>
+    </div>
+
+    <!-- 结局部分 -->
+    <div id="ending" class="story-section">
+        <div class="text-segment" data-segment="1">
+            <p>布鲁斯走向那扇被他踹开的门。门外……不是走廊。是一片虚无。是旋转的、绿黄色的星云，伴随着遥远的、像心跳一样的鼓声。</p>
+        </div>
+        <div class="text-segment" data-segment="2">
+            <p><span class="skill-check">天人感应 (SHIVERS)：</span><span class="skill-text">"冷。太冷了。外面……外面是你的恐惧。是海岸城。是Oa星。是所有的坟墓。别出去。"</span></p>
+        </div>
+        <div class="text-segment" data-segment="3">
+            <p><span class="skill-check">平心定气 (VOLITION)：</span><span class="skill-text">"说的对。但你必须出去。你不能永远留在这个恶心的房间里。握紧那枚褪色的戒指。"</span></p>
+        </div>
+        <div class="text-segment" data-segment="4">
+            <p>布鲁斯站在门口，像一个黑色的剪影，背对着那片混沌。</p>
+            <p>"这个地方是你潜意识的'边缘'。"他说。</p>
+            <p>"你把自己锁在了这里。我们必须出去，去到'中心'。你必须找到你为什么会困住自己的'谜题'。"</p>
+            <p>"你准备好了吗，哈尔？"</p>
+        </div>
+        <div class="text-segment" data-segment="5">
+            <button class="choice-button" onclick="alert('第一章结束')">"我从没准备好过。走吧。"</button>
+            <button class="choice-button" onclick="alert('第一章结束')">"（深呼吸）我需要……我需要我的戒指重新亮起来。"</button>
+            <button class="choice-button" onclick="alert('第一章结束')">"你会一直陪着我吗，布鲁斯？"</button>
+            <button class="choice-button" onclick="alert('第一章结束')">"如果我说不呢？"</button>
+        </div>
+    </div>
+    
+    <button class="start-over" onclick="showSection('start')">重新开始</button>
+    
+    <button id="nextButton" class="next-button" onclick="nextSegment()">下一步 ▶</button>
+    <button id="historyButton" class="history-button" onclick="openHistory()">历史记录</button>
+
+    <div id="historyModal" class="history-modal" role="dialog" aria-modal="true">
+        <div class="history-header">
+            <h3>已显示的文本历史</h3>
+            <button class="history-close" onclick="closeHistory()">✕</button>
+        </div>
+        <div class="history-content">
+            <ul id="historyList" class="history-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        // debug 模式：在 URL 中添加 ?debug=1 可启用
+        const DEBUG = (new URLSearchParams(window.location.search)).has('debug');
+        if (DEBUG) {
+            console.info('DEBUG mode enabled for text.html');
+        }
+        // 页面内调试面板，用于在无法打开 DevTools 时收集日志
+        let _debugPanel = null;
+        function ensureDebugPanel() {
+            if (!DEBUG) return;
+            if (_debugPanel) return;
+            _debugPanel = document.createElement('div');
+            _debugPanel.id = 'debugPanel';
+            _debugPanel.style.position = 'fixed';
+            _debugPanel.style.left = '10px';
+            _debugPanel.style.bottom = '10px';
+            _debugPanel.style.width = '360px';
+            _debugPanel.style.maxHeight = '40vh';
+            _debugPanel.style.overflow = 'auto';
+            _debugPanel.style.background = 'rgba(0,0,0,0.7)';
+            _debugPanel.style.color = '#fff';
+            _debugPanel.style.fontSize = '12px';
+            _debugPanel.style.padding = '8px';
+            _debugPanel.style.zIndex = 99999;
+            _debugPanel.style.border = '1px solid rgba(255,255,255,0.08)';
+            _debugPanel.style.borderRadius = '6px';
+            document.body.appendChild(_debugPanel);
+
+            // 重定向 console 输出到面板
+            const originalLog = console.log;
+            const originalDebug = console.debug;
+            const originalInfo = console.info;
+            const originalError = console.error;
+            function append(msg, cls) {
+                try {
+                    const el = document.createElement('div');
+                    el.textContent = msg;
+                    if (cls === 'err') el.style.color = '#ff8080';
+                    _debugPanel.appendChild(el);
+                    _debugPanel.scrollTop = _debugPanel.scrollHeight;
+                } catch (e) { /* ignore */ }
+            }
+            console.log = function(...args){ originalLog.apply(console, args); append(args.join(' ')); };
+            console.debug = function(...args){ originalDebug.apply(console, args); append('[dbg] '+args.join(' ')); };
+            console.info = function(...args){ originalInfo.apply(console, args); append('[info] '+args.join(' ')); };
+            console.error = function(...args){ originalError.apply(console, args); append('[error] '+args.join(' '), 'err'); };
+        }
+        let currentSegment = 0;
+        let totalSegments = 0;
+        const history = []; // 存放已显示段落文本（按出现顺序）
+
+        function showSection(sectionId) {
+            if (DEBUG) console.debug('showSection()', sectionId);
+            ensureDebugPanel();
+            // 防止短时间内重复进入导致闪烁
+            if (showSection._lock) {
+                if (DEBUG) console.debug('showSection reentrancy blocked');
+                return;
+            }
+            showSection._lock = true;
+            setTimeout(()=> showSection._lock = false, 120);
+            // 隐藏所有章节
+            document.querySelectorAll('.story-section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // 全局隐藏所有已显示的段落与选择按钮，防止前一节的按钮/段落残留
+            document.querySelectorAll('.text-segment.visible').forEach(seg => {
+                seg.classList.remove('visible');
+                // 清理我们可能设置的内联样式，避免残留可见性
+                try {
+                    seg.style.display = '';
+                    seg.style.opacity = '';
+                    seg.style.zIndex = '';
+                    seg.style.outline = '';
+                    seg.style.transition = '';
+                } catch (e) { /* ignore */ }
+            });
+            document.querySelectorAll('.choice-button').forEach(btn => {
+                btn.style.display = 'none';
+            });
+
+            // 显示选中的章节
+            const section = document.getElementById(sectionId);
+            section.classList.add('active');
+            // 强制设置 display:flex 以防样式被外部覆盖或注入脚本改变了显示方式
+            section.style.display = 'flex';
+            // 防护：确保章节至少占满视口高度且可见
+            section.style.minHeight = '100vh';
+            section.style.visibility = 'visible';
+            section.style.opacity = '1';
+
+            // 重置段落计数
+            currentSegment = 0;
+            // 计算当前章节的总段落数
+            totalSegments = section.querySelectorAll('.text-segment').length;
+
+            // 如果该章节没有任何 .text-segment（很多分支当前是直接用 <p>），
+            // 则把现有的非按钮内容动态包裹为一个临时段落，保证 nextSegment 有东西可显示。
+            if (totalSegments === 0) {
+                // 将除 choice-button 之外的子元素各自包成独立的 .text-segment（保持原始顺序）
+                const childrenToMove = [];
+                Array.from(section.childNodes).forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        const el = node;
+                        if (!el.classList.contains('choice-button') && el.id !== 'historyModal') {
+                            childrenToMove.push(el);
+                        }
+                    } else if (node.nodeType === Node.TEXT_NODE) {
+                        if (node.textContent.trim()) childrenToMove.push(node);
+                    }
+                });
+
+                const frag = document.createDocumentFragment();
+                const segElements = [];
+                childrenToMove.forEach((node, idx) => {
+                    const seg = document.createElement('div');
+                    seg.className = 'text-segment';
+                    seg.setAttribute('data-segment', String(idx + 1));
+                    seg.appendChild(node);
+                    frag.appendChild(seg);
+                    segElements.push(seg);
+                });
+                // 如果没有生成任何段，插入一个占位段以避免空白页
+                if (segElements.length === 0) {
+                    const ph = document.createElement('div');
+                    ph.className = 'text-segment';
+                    ph.setAttribute('data-segment', '1');
+                    ph.textContent = '（本节暂无文本）';
+                    frag.appendChild(ph);
+                    segElements.push(ph);
+                }
+                // 插入所有生成的段，保持原始顺序
+                section.insertBefore(frag, section.firstChild);
+                totalSegments = segElements.length;
+                if (DEBUG) console.debug('showSection: created', totalSegments, 'segments for', sectionId);
+            }
+
+            // 隐藏所有段落与选择按钮（并清理内联样式）
+            section.querySelectorAll('.text-segment').forEach(segment => {
+                segment.classList.remove('visible');
+                try {
+                    segment.style.display = '';
+                    segment.style.opacity = '';
+                    segment.style.zIndex = '';
+                    segment.style.outline = '';
+                    segment.style.transition = '';
+                } catch (e) { /* ignore */ }
+            });
+            section.querySelectorAll('.choice-button').forEach(button => {
+                button.style.display = 'none';
+            });
+
+            // 显示第一段（手动显示，避免自动多次调用 nextSegment 导致快速推进）
+                // 显示第一段（手动显示，避免自动多次调用 nextSegment 导致快速推进）
+                currentSegment = 1;
+            let firstSeg = section.querySelector('[data-segment="1"]');
+            // 如果没有找到第一段（可能因为该分支使用直接 <p>），再尝试构造一个 wrapper
+            if (!firstSeg) {
+                if (totalSegments === 0) {
+                    // 如果之前没有创建任何段落，则将内容按块拆分为多个段
+                    const childrenToMove = [];
+                    Array.from(section.childNodes).forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const el = node;
+                            if (!el.classList.contains('choice-button') && el.id !== 'historyModal') {
+                                childrenToMove.push(el);
+                            }
+                        } else if (node.nodeType === Node.TEXT_NODE) {
+                            if (node.textContent.trim()) childrenToMove.push(node);
+                        }
+                    });
+                    const frag = document.createDocumentFragment();
+                    const segElements = [];
+                    childrenToMove.forEach((node, idx) => {
+                        const seg = document.createElement('div');
+                        seg.className = 'text-segment';
+                        seg.setAttribute('data-segment', String(idx + 1));
+                        seg.appendChild(node);
+                        frag.appendChild(seg);
+                        segElements.push(seg);
+                    });
+                    section.insertBefore(frag, section.firstChild);
+                    totalSegments = segElements.length;
+                    firstSeg = segElements[0] || null;
+                    if (DEBUG) console.debug('showSection: created fallback', totalSegments, 'segments for', sectionId);
+                }
+            }
+                if (firstSeg) {
+                    firstSeg.classList.add('visible');
+                    firstSeg.style.display = 'block';
+                    firstSeg.style.opacity = '1';
+                    firstSeg.style.zIndex = '150';
+                    if (DEBUG) {
+                        firstSeg.style.outline = '2px dashed yellow';
+                        firstSeg.style.transition = 'none';
+                    }
+                    // 确保这个段落在视口可见，避免出现空白页
+                    try { firstSeg.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (e) { /* ignore */ }
+                    // 将纯文本加入历史（去掉多余空白）
+                    const text = firstSeg.innerText.trim();
+                    if (text) history.push(text);
+                    if (DEBUG) {
+                        const rect = firstSeg.getBoundingClientRect();
+                        const cs = window.getComputedStyle(firstSeg);
+                        console.debug('firstSeg rect', rect, 'display', cs.display, 'visibility', cs.visibility, 'color', cs.color);
+                        console.debug('section rect', section.getBoundingClientRect(), 'section display', window.getComputedStyle(section).display);
+                    }
+                    // 兼容性保护：在下一帧再次应用可见样式并滚动，以避免渲染/重绘竞争导致的短暂空白
+                    try {
+                        requestAnimationFrame(() => {
+                            try { firstSeg.style.display = 'block'; firstSeg.style.opacity = '1'; firstSeg.style.zIndex = '150'; } catch(e){}
+                            try { firstSeg.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch(e){}
+                            if (DEBUG) {
+                                const rect2 = firstSeg.getBoundingClientRect();
+                                console.debug('firstSeg rect after rAF', rect2);
+                            }
+                        });
+                    } catch(e) { /* ignore */ }
+                }
+
+                // 根据段落数量决定按钮显示
+                if (currentSegment < totalSegments) {
+                    const nb = document.getElementById('nextButton'); nb.classList.remove('hidden'); nb.style.display = '';
+                } else {
+                    const choiceButtons = section.querySelectorAll('.choice-button');
+                    if (choiceButtons.length > 0) {
+                        choiceButtons.forEach(button => button.style.display = 'block');
+                    }
+                    const nb = document.getElementById('nextButton'); nb.classList.add('hidden'); nb.style.display = 'none';
+                }
+
+            if (DEBUG) {
+                // 输出当前活动段的数量与可见段信息
+                console.debug('after showSection -> totalSegments=', totalSegments, 'currentSegment=', currentSegment);
+                console.debug('visible segments:', Array.from(section.querySelectorAll('.text-segment.visible')).map(s=>s.getAttribute('data-segment')));
+            }
+            // 滚动到顶部（保证居中时仍回到顶部）
+            window.scrollTo(0, 0);
+        }
+
+        function nextSegment() {
+            const activeSection = document.querySelector('.story-section.active');
+            if (DEBUG) console.debug('nextSegment() activeSection=', activeSection ? activeSection.id : null, 'currentSegment=', currentSegment, 'totalSegments=', totalSegments);
+            if (!activeSection) return;
+            // 防止短时间重复调用
+            if (nextSegment._lock) {
+                if (DEBUG) console.debug('nextSegment reentrancy blocked');
+                return;
+            }
+            nextSegment._lock = true;
+            setTimeout(()=> nextSegment._lock = false, 80);
+
+            // 隐藏当前所有段落 — 保证屏幕上仅有当前段落显示，并清理内联样式
+            activeSection.querySelectorAll('.text-segment').forEach(segment => {
+                segment.classList.remove('visible');
+                try {
+                    segment.style.display = '';
+                    segment.style.opacity = '';
+                    segment.style.zIndex = '';
+                    segment.style.outline = '';
+                    segment.style.transition = '';
+                } catch (e) { /* ignore */ }
+            });
+
+            currentSegment++;
+            const nextSegmentElement = activeSection.querySelector(`[data-segment="${currentSegment}"]`);
+
+            if (nextSegmentElement) {
+            // 显示这个段落（并做额外的强制样式以防止被其他样式覆盖）
+            nextSegmentElement.classList.add('visible');
+            // 强制设置样式，确保渲染可见
+            nextSegmentElement.style.display = 'block';
+            nextSegmentElement.style.opacity = '1';
+            nextSegmentElement.style.zIndex = '150';
+
+            if (DEBUG) {
+                // 为调试在可见段落周围添加边框，便于观察是否被遮挡
+                nextSegmentElement.style.outline = '2px dashed yellow';
+                nextSegmentElement.style.transition = 'none';
+            }
+
+            // 把段落滚动到容器中居中（作为兼容性保证）
+            try { nextSegmentElement.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (e) { /* ignore */ }
+
+            // 将纯文本加入历史（去掉多余空白）
+            const text = nextSegmentElement.innerText.trim();
+            if (text) history.push(text);
+
+            if (DEBUG) {
+                const rect = nextSegmentElement.getBoundingClientRect();
+                const cs = window.getComputedStyle(nextSegmentElement);
+                console.debug('nextSeg rect', rect, 'display', cs.display, 'visibility', cs.visibility, 'color', cs.color);
+            }
+
+                // 如果不是最后一段，保持"下一步"按钮可见
+                if (currentSegment < totalSegments) {
+                    document.getElementById('nextButton').classList.remove('hidden');
+                } else {
+                    // 到达本章节最后一段：显示选择按钮（若有）并隐藏下一步
+                    const choiceButtons = activeSection.querySelectorAll('.choice-button');
+                    if (choiceButtons.length > 0) {
+                        choiceButtons.forEach(button => button.style.display = 'block');
+                    }
+                    document.getElementById('nextButton').classList.add('hidden');
+                }
+            }
+
+            if (DEBUG) console.debug('after nextSegment -> visible:', Array.from(activeSection.querySelectorAll('.text-segment.visible')).map(s=>s.getAttribute('data-segment')));
+        }
+
+        function openHistory() {
+            renderHistoryList();
+            document.getElementById('historyModal').classList.add('visible');
+        }
+
+        function closeHistory() {
+            document.getElementById('historyModal').classList.remove('visible');
+        }
+
+        function renderHistoryList() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = '';
+            if (history.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = '目前没有历史记录。';
+                list.appendChild(li);
+                return;
+            }
+            history.forEach((entry, idx) => {
+                const li = document.createElement('li');
+                li.textContent = `${idx + 1}. ${entry}`;
+                list.appendChild(li);
+            });
+        }
+
+        // 初始化时隐藏所有选择按钮并开始第一章分段显示
+        function initStory() {
+            document.querySelectorAll('.choice-button').forEach(button => {
+                button.style.display = 'none';
+            });
+            // 开始显示第一段
+            showSection('start');
+        }
+
+        // 如果文档尚未完全加载，则在 DOMContentLoaded 后运行；否则立即运行以确保初始化不会被遗漏
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initStory);
+        } else {
+            initStory();
+        }
+    </script>
+</body>
+</html>
